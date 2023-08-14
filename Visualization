@@ -1,1 +1,97 @@
 
+## Install the necessary package
+
+npm install chart.js
+
+
+## Create component for data visualization
+
+// src/components/DataVisualization.js
+import React, { useEffect, useState } from 'react';
+import Chart from 'chart.js';
+
+const DataVisualization = () => {
+  const [chartData, setChartData] = useState({});
+
+  useEffect(() => {
+    // Fetch the data for the chart (replace this with actual data from the backend)
+    const languageProgressData = {
+      languages: ['English', 'Spanish', 'French', 'German', 'Mandarin'],
+      progress: [45, 60, 30, 75, 50],
+    };
+
+    // Create the chart
+    const ctx = document.getElementById('languageProgressChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: languageProgressData.languages,
+        datasets: [{
+          label: 'Progress (%)',
+          data: languageProgressData.progress,
+          backgroundColor: 'rgba(54, 162, 235, 0.5)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+          },
+        },
+      },
+    });
+
+    // Save the chart instance to state (optional, can be useful for updating the chart dynamically)
+    setChartData(chart);
+  }, []);
+
+  return (
+    <div>
+      <h2>Language Learning Progress</h2>
+      <canvas id="languageProgressChart" width="400" height="200"></canvas>
+    </div>
+  );
+};
+
+export default DataVisualization;
+
+
+## Use the DataVisualization component in your main App
+
+// src/App.js
+import React from 'react';
+import { BrowserRouter as Router, Switch, Route } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import Home from './components/Home';
+import Lessons from './components/Lessons';
+import LanguageExchange from './components/LanguageExchange';
+import VocabularyBuilder from './components/VocabularyBuilder';
+import Community from './components/Community';
+import UserProfile from './components/UserProfile';
+import DataVisualization from './components/DataVisualization'; // Import the DataVisualization component
+
+function App() {
+  return (
+    <Router>
+      <Navbar />
+      <Switch>
+        <Route path="/" exact component={Home} />
+        <Route path="/lessons" component={Lessons} />
+        <Route path="/language-exchange" component={LanguageExchange} />
+        <Route path="/vocabulary-builder" component={VocabularyBuilder} />
+        <Route path="/community" component={Community} />
+        <Route path="/profile" component={UserProfile} />
+        <Route path="/data-visualization" component={DataVisualization} /> {/* Add this route */}
+      </Switch>
+    </Router>
+  );
+}
+
+export default App;
+
+## Customize the DataVisualization component and fetch the actual data from the backend for the chart. 
+## In this example, I used placeholder data for demonstration purposes, 
+## but in real application, you would need to make API calls to retrieve relevant data.
