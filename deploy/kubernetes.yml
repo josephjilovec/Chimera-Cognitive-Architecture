@@ -1,0 +1,115 @@
+```yaml
+# deploy/kubernetes.yml: Kubernetes configuration for deploying the Chimera Cognitive Architecture.
+# Purpose: Defines a pod running the Docker container from deploy/Dockerfile, configures resource limits
+# for CPU, GPU, and memory, exposes port 5000 via a ClusterIP service, and sets up a HorizontalPodAutoscaler
+# for high availability. Ensures compatibility with Julia (1.10.0), SBCL, and CUDA (12.2) environments.
+# Designed for scalability and reliability in cloud deployments.
+
+---
+# Deployment for Chimera Cognitive Architecture
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chimera-deployment
+  namespace: chimera
+  labels:
+    app: chimera
+spec:
+  replicas: 2  # Initial replicas for high availability
+  selector:
+    matchLabels:
+      app: chimera
+  template:
+    metadata:
+      labels:
+        app: chimera
+    spec:
+      containers:
+      - name: chimera-container
+        image: chimera-cognitive-architecture:latest
+        imagePullPolicy: IfNotPresent  # Use local image if available
+        ports:
+        - containerPort: 5000
+          name: julia-port
+        env:
+        - name: JULIA_HOST
+          value: "localhost"
+        - name: JULIA_PORT
+          value: "5000"
+        - name: QUANTUM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chimera-secrets
+              key: quantum-api-key
+              optional: true  # Optional for simulator-only mode
+        resources:
+          limits:
+            cpu: "2"  # 2 CPU cores
+            memory: "4Gi"  # 4 GB memory
+            nvidia.com/gpu: 1  # 1 NVIDIA GPU
+          requests:
+            cpu: "1"  # 1 CPU core
+            memory: "2Gi"  # 2 GB memory
+            nvidia.com/gpu: 1  # 1 NVIDIA GPU
+        readinessProbe:
+          httpGet:
+            path: /
+            port: julia-port
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: julia-port
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      nodeSelector:
+        kubernetes.io/os: linux  # Ensure Linux nodes for CUDA compatibility
+        nvidia.com/gpu: "true"  # Require nodes with NVIDIA GPUs
+
+---
+# Service to expose the Chimera pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: chimera-service
+  namespace: chimera
+  labels:
+    app: chimera
+spec:
+  selector:
+    app: chimera
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: julia-port
+  type: ClusterIP  # Internal service for Lisp-Julia communication
+
+---
+# Horizontal Pod Autoscaler for scalability
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chimera-hpa
+  namespace: chimera
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chimera-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Scale up if CPU usage exceeds 70%
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Scale up if memory usage exceeds 80%
+```
