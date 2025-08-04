@@ -1,0 +1,103 @@
+# .gitignore for the Chimera Cognitive Architecture
+# Purpose: Ignores Common Lisp artifacts (e.g., *.fasl), Julia artifacts (e.g., Manifest.toml),
+# build outputs (e.g., build/, dist/), environment files (e.g., .env), and logs to keep the
+# repository clean. Ensures comprehensive coverage for Lisp (SBCL) and Julia (1.10.0) environments,
+# aligning with the modular structure defined in docs/architecture.md.
+
+# Common Lisp artifacts
+*.fasl
+*.fas
+*.lib
+*.a
+*.o
+*~
+*.sbclrc
+quicklisp.lisp
+quicklisp/
+
+# Julia artifacts
+Manifest.toml
+LocalPreferences.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+.vscode/
+.julia/
+*.ipynb
+
+# Build outputs
+build/
+dist/
+target/
+out/
+
+# Environment files
+.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+
+# Docker and container-related files
+docker-compose.yml
+*.dockerignore
+*.docker
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+node_modules/
+vendor/
+_deps/
+.deps/
+
+# Test and coverage reports
+coverage/
+*.cov
+lcov.info
+test-results/
+junit.xml
+
+# IDE and editor files
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+# Python artifacts (for potential scripts or tools)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Miscellaneous
+*.lock
+*.cache
+*.pid
+*.pid.lock
+
+# Project-specific directories
+backend/python/__pycache__/
+backend/rust/target/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
