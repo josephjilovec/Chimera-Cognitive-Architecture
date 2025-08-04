@@ -23,7 +23,7 @@ Docker: Optional, for containerized deployment
 Installation
 
 Clone the Repository:
-git clone https://github.com/username/chimera.git
+git clone https://github.com/josephjilovec/chimera.git
 cd chimera
 
 
