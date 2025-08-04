@@ -1,6 +1,9 @@
-Chimera Cognitive Architecture
+~Chimera~
+
 The Chimera Cognitive Architecture is an open-source framework designed to integrate symbolic reasoning, parallel computation, and quantum modeling to solve complex cognitive tasks. By combining a Lisp-based symbolic reasoning engine, a Julia-based parallel computation engine with CUDA acceleration, and a quantum modeling engine using Yao.jl, Chimera enables hybrid intelligence workflows that are modular, scalable, and suitable for advanced technical audiences, such as quantum cloud teams and AI researchers. This document outlines the architecture's components, their interactions, and data flow, referencing key implementation files and using Mermaid diagrams for clarity.
+
 Overview
+
 Chimera is structured to orchestrate cognitive tasks through three primary engines:
 
 Symbolic Reasoning Engine (Lisp): Handles high-level planning, knowledge representation, and inference using Common Lisp for robust symbolic processing.
@@ -8,6 +11,7 @@ Parallel Computation Engine (Julia with CUDA): Executes computationally intensiv
 Quantum Modeling Engine (Julia with Yao.jl): Simulates and executes quantum circuits for optimization and modeling tasks, using Yao.jl for quantum computations.
 
 These engines communicate via JSON over TCP sockets, ensuring modularity and interoperability. The architecture supports hybrid workflows, cloud deployment, and open-source contribution, aligning with modern AI research demands.
+
 System Components
 1. Symbolic Reasoning Engine (Lisp)
 The symbolic reasoning engine, implemented in Common Lisp (SBCL), is responsible for knowledge representation, inference, and task planning. It processes symbolic instructions, decomposes complex problems into sub-tasks, and delegates computations to the Julia layer.
