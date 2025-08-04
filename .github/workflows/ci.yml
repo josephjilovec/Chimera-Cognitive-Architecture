@@ -1,0 +1,175 @@
+```yaml
+# .github/workflows/ci.yml: GitHub Actions CI/CD pipeline for the Chimera Cognitive Architecture.
+# Purpose: Runs FiveAM tests for Lisp and Test.jl tests for Julia on push to main. Lints Lisp code
+# with SBCL and Julia code with JuliaFormatter. Builds and pushes the Docker image to a registry
+# (Docker Hub or AWS ECR). Deploys to AWS ECS on successful tests. Uses Docker for testing and
+# deployment, with error handling for test or deployment failures. Ensures compatibility with
+# Julia (1.10.0), SBCL, and CUDA (12.2) environments.
+
+name: CI/CD Pipeline for Chimera Cognitive Architecture
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DOCKER_IMAGE: chimera-cognitive-architecture:${{ github.sha }}
+  DOCKER_REGISTRY: docker.io  # Replace with your registry (e.g., <your-org>/chimera-cognitive-architecture)
+  AWS_REGION: us-west-2  # Replace with your AWS region
+  ECS_CLUSTER: chimera-cluster
+  ECS_SERVICE: chimera-service
+
+jobs:
+  lint:
+    name: Lint Lisp and Julia Code
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up SBCL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sbcl
+          sbcl --version
+
+      - name: Install Quicklisp
+        run: |
+          curl -O https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive --load quicklisp.lisp \
+               --eval '(quicklisp-quickstart:install)' \
+               --eval '(ql:add-to-init-file)' \
+               --eval '(quit)' || { echo "Quicklisp installation failed"; exit 1; }
+
+      - name: Lint Lisp Code
+        run: |
+          sbcl --non-interactive --load /root/quicklisp/setup.lisp \
+               --eval '(ql:quickload :(:fiveam :usocket :jsown :cl-ppcre))' \
+               --eval '(dolist (file (directory "backend/lisp/reasoning/*.lisp")) (load file))' \
+               --eval '(handler-case (progn (format t "Linting Lisp files...~%") (quit)) (error (e) (format t "Lint error: ~A~%" e) (sb-ext:exit :code 1)))'
+
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          version: '1.10.0'
+
+      - name: Install JuliaFormatter
+        run: |
+          julia -e 'using Pkg; Pkg.add("JuliaFormatter")' || { echo "JuliaFormatter installation failed"; exit 1; }
+
+      - name: Lint Julia Code
+        run: |
+          julia -e 'using JuliaFormatter; format("backend/julia", verbose=true)' || { echo "Julia linting failed"; exit 1; }
+
+  test:
+    name: Run Lisp and Julia Tests
+    runs-on: ubuntu-20.04
+    needs: lint
+    container:
+      image: nvidia/cuda:12.2.0-devel-ubuntu20.04
+      options: --gpus all
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install System Dependencies
+        run: |
+          apt-get update
+          apt-get install -y curl sbcl
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Install Quicklisp
+        run: |
+          curl -O https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive --load quicklisp.lisp \
+               --eval '(quicklisp-quickstart:install)' \
+               --eval '(ql:add-to-init-file)' \
+               --eval '(quit)' || { echo "Quicklisp installation failed"; exit 1; }
+
+      - name: Install Julia
+        run: |
+          curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -o julia.tar.gz
+          tar -xvzf julia.tar.gz
+          mv julia-1.10.0 /opt/julia
+          ln -s /opt/julia/bin/julia /usr/local/bin/julia
+          rm julia.tar.gz
+          julia --version || { echo "Julia installation failed"; exit 1; }
+
+      - name: Install Julia Dependencies
+        run: |
+          julia -e 'using Pkg; \
+                    Pkg.activate("."); \
+                    Pkg.add([ \
+                        Pkg.PackageSpec(name="Flux", version="0.14.0"), \
+                        Pkg.PackageSpec(name="Yao", version="0.8.0"), \
+                        Pkg.PackageSpec(name="CUDA", version="5.4.0"), \
+                        Pkg.PackageSpec(name="Test"), \
+                        Pkg.PackageSpec(name="JSON") \
+                    ]); \
+                    Pkg.resolve(); \
+                    Pkg.instantiate()' || { echo "Julia package installation failed"; exit 1; }
+
+      - name: Run Lisp Tests
+        run: |
+          sbcl --non-interactive --load tests/lisp/test-knowledge.lisp || { echo "Lisp knowledge tests failed"; exit 1; }
+          sbcl --non-interactive --load tests/lisp/test-planner.lisp || { echo "Lisp planner tests failed"; exit 1; }
+
+      - name: Run Julia Tests
+        run: |
+          julia --project=. tests/julia/test-neural.jl || { echo "Julia neural tests failed"; exit 1; }
+          julia --project=. tests/julia/test-quantum.jl || { echo "Julia quantum tests failed"; exit 1; }
+
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-20.04
+    needs: test
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        continue-on-error: false
+
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ env.DOCKER_IMAGE }} -f deploy/Dockerfile . || { echo "Docker build failed"; exit 1; }
+
+      - name: Push Docker Image
+        run: |
+          docker tag ${{ env.DOCKER_IMAGE }} ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }} || { echo "Docker push failed"; exit 1; }
+
+  deploy:
+    name: Deploy to AWS ECS
+    runs-on: ubuntu-20.04
+    needs: build-and-push
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        continue-on-error: false
+
+      - name: Update ECS Task Definition
+        run: |
+          aws ecs register-task-definition --cli-input-yaml file://deploy/aws_config.yml || { echo "Task definition registration failed"; exit 1; }
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition chimera-task \
+            --force-new-deployment || { echo "ECS deployment failed"; exit 1; }
+
+```
