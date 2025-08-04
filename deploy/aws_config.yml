@@ -1,0 +1,164 @@
+```yaml
+# deploy/aws_config.yml: AWS ECS task definition for deploying the Chimera Cognitive Architecture.
+# Purpose: Configures a task definition for the Docker container from deploy/Dockerfile, specifying
+# CPU, memory, and networking requirements. Integrates with AWS S3 for model storage and loads
+# environment variables from .env. Ensures compatibility with Julia (1.10.0), SBCL, and CUDA (12.2)
+# environments for the Lisp and Julia layers. Designed for scalability and reliability in AWS ECS.
+
+---
+# ECS Task Definition
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Task Definition for Chimera Cognitive Architecture
+Resources:
+  ChimeraTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: chimera-task
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/ecsTaskExecutionRole
+      TaskRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/ChimeraTaskRole
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '2048'  # 2 vCPUs
+      Memory: '4096'  # 4 GB
+      ContainerDefinitions:
+        - Name: chimera-container
+          Image: chimera-cognitive-architecture:latest
+          Essential: true
+          PortMappings:
+            - ContainerPort: 5000
+              HostPort: 5000
+              Protocol: tcp
+          Environment:
+            - Name: JULIA_HOST
+              Value: localhost
+            - Name: JULIA_PORT
+              Value: '5000'
+            - Name: QUANTUM_API_KEY
+              Value: !Ref QuantumApiKey
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: S3_BUCKET
+              Value: !Ref S3ModelBucket
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/chimera
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: chimera
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:5000 || exit 1
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 10
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+
+  # ECS Service
+  ChimeraService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: chimera-service
+      TaskDefinition: !Ref ChimeraTaskDefinition
+      DesiredCount: 2  # Minimum 2 tasks for high availability
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
+          SecurityGroups:
+            - !Ref ChimeraSecurityGroup
+          AssignPublicIp: ENABLED
+      HealthCheckGracePeriodSeconds: 60
+
+  # Security Group for ECS Service
+  ChimeraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Chimera ECS service
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0  # Adjust for production
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  # S3 Bucket for Model Storage
+  S3ModelBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub chimera-models-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # IAM Role for ECS Task
+  ChimeraTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ChimeraS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::chimera-models-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::chimera-models-${AWS::AccountId}/*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+Parameters:
+  ECSCluster:
+    Type: String
+    Description: Name of the ECS cluster
+  VPC:
+    Type: String
+    Description: VPC ID for the ECS service
+  SubnetA:
+    Type: String
+    Description: Subnet ID for availability zone A
+  SubnetB:
+    Type: String
+    Description: Subnet ID for availability zone B
+  QuantumApiKey:
+    Type: String
+    Description: Quantum API key for hardware backends
+    Default: ""
+    NoEcho: true
+
+Outputs:
+  ServiceName:
+    Description: Name of the ECS service
+    Value: !Ref ChimeraService
+  TaskDefinitionArn:
+    Description: ARN of the ECS task definition
+    Value: !Ref ChimeraTaskDefinition
+  S3BucketName:
+    Description: Name of the S3 bucket for model storage
+    Value: !Ref S3ModelBucket
+```
